@@ -1,0 +1,11 @@
+--- gradio_app.py
++++ gradio_app.py
+@@ -354,7 +354,7 @@
+                 <i class="fa fa-tags"></i> Kelas model: <b id="class-list">{classes_text}</b>
+             </p>
+-            <p class="domain"><i class="fa fa-globe"></i> cnn.arnr.dev</p>
++            <p class="domain"><i class="fa fa-globe"></i> batik.arnr.dev</p>
+         </div>
+         """)
+ 
+ 

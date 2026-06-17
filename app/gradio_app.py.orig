@@ -1,0 +1,335 @@
+"""
+Gradio Web App: Klasifikasi Motif Batik (CNN)
+
+Jalankan:
+    python app/gradio_app.py
+    python app/gradio_app.py --port 7860
+"""
+
+from __future__ import annotations
+
+import base64
+import io
+import os
+import sys
+import argparse
+from pathlib import Path
+
+import gradio as gr
+import numpy as np
+import torch
+from PIL import Image
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from src.inference import (  # noqa: E402
+    load_model_and_meta,
+    predict_batik,
+    format_results_for_ui,
+    create_dummy_checkpoint,
+    DEFAULT_CLASS_NAMES,
+)
+
+FA_HEAD = """
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+"""
+
+CUSTOM_CSS = """
+:root {
+    --primary: #92400e;
+    --primary-dark: #78350f;
+    --surface: #ffffff;
+    --bg: #fffbeb;
+    --text: #0f172a;
+    --muted: #64748b;
+    --border: #fde68a;
+    --card-shadow: 0 4px 24px rgba(120, 53, 15, 0.12);
+}
+.gradio-container {
+    font-family: 'DM Sans', system-ui, sans-serif !important;
+    background: var(--bg) !important;
+}
+.app-header {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 55%, #d97706 100%);
+    border-radius: 16px;
+    padding: 28px 32px;
+    color: #fff;
+    margin-bottom: 20px;
+    box-shadow: var(--card-shadow);
+}
+.app-header h1 { margin: 0 0 8px; font-size: 1.75rem; font-weight: 700; }
+.app-header .subtitle { margin: 0; opacity: 0.92; font-size: 1rem; }
+.info-box {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-left: 4px solid #f97316;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    color: #7c2d12;
+    font-size: 0.92rem;
+    line-height: 1.55;
+}
+.section-title { font-size: 1.05rem; font-weight: 600; color: var(--text); margin: 0 0 12px; }
+.section-title .fa { color: var(--primary); margin-right: 8px; width: 18px; text-align: center; }
+.panel-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; box-shadow: var(--card-shadow); }
+.result-card { background: linear-gradient(180deg, #fffaf0 0%, #fff 100%); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; line-height: 1.6; }
+.result-card, .result-card h3, .result-card p, .result-card div, .result-card span { color: #0f172a !important; }
+.result-card h3 { margin: 0 0 12px; font-size: 1.2rem; }
+.result-meta { display: grid; gap: 8px; font-size: 0.95rem; color: var(--muted); }
+.result-meta span { color: var(--text); font-weight: 600; }
+.status-warn { color: #b45309 !important; }
+.status-err { color: #b91c1c !important; }
+.hint-list { font-size: 0.9rem; color: #1e293b !important; line-height: 1.7; margin: 10px 0 0; padding: 14px 16px; list-style: none; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; }
+.hint-list li { margin-bottom: 8px; color: #1e293b !important; }
+.hint-list li:last-child { margin-bottom: 0; }
+.hint-list .fa { color: var(--primary) !important; margin-right: 8px; width: 14px; }
+.app-footer { text-align: center; color: var(--muted); font-size: 0.82rem; margin-top: 8px; padding: 12px; }
+.tool-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0 12px; }
+#upload-cam-feed { border-radius: 12px; overflow: hidden; }
+"""
+
+
+def _resolve_model_path() -> str:
+    env = os.environ.get("BATIK_CNN_MODEL")
+    if env and os.path.isfile(env):
+        return env
+    for candidate in [
+        ROOT / "checkpoints" / "batik_best.pth",
+        ROOT / "checkpoints" / "best.pth",
+        ROOT / "checkpoints" / "best_model.pth",
+        ROOT / "checkpoints" / "demo_dummy_model.pth",
+    ]:
+        if candidate.is_file():
+            return str(candidate)
+    return str(ROOT / "checkpoints" / "demo_dummy_model.pth")
+
+
+MODEL_PATH = _resolve_model_path()
+MODEL_NAME = "resnet18"
+MODEL = None
+CLASS_NAMES: list[str] = list(DEFAULT_CLASS_NAMES)
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+APP_THEME = gr.themes.Soft(
+    primary_hue="orange",
+    neutral_hue="slate",
+    font=[gr.themes.GoogleFont("DM Sans"), "system-ui", "sans-serif"],
+)
+
+
+def ensure_demo_model() -> None:
+    global MODEL, CLASS_NAMES
+
+    ckpt_path = Path(MODEL_PATH)
+    if not ckpt_path.exists():
+        print("[gradio] No trained model found. Creating a dummy checkpoint for demo...")
+        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+        create_dummy_checkpoint(
+            num_classes=len(DEFAULT_CLASS_NAMES),
+            model_name=MODEL_NAME,
+            save_path=str(ckpt_path),
+            seed=123,
+        )
+
+    MODEL, CLASS_NAMES = load_model_and_meta(
+        checkpoint_path=str(ckpt_path) if ckpt_path.exists() else None,
+        model_name=MODEL_NAME,
+        num_classes=len(DEFAULT_CLASS_NAMES),
+        device=DEVICE,
+    )
+    print(f"[gradio] Model ready on {DEVICE}. Classes: {CLASS_NAMES}")
+
+
+def _to_pil(image) -> Image.Image | None:
+    if image is None:
+        return None
+
+    if isinstance(image, dict):
+        image = image.get("path") or image.get("image") or image.get("url")
+
+    if isinstance(image, (str, Path)):
+        text = str(image)
+        if text.startswith("data:image"):
+            _, payload = text.split(",", 1)
+            return Image.open(io.BytesIO(base64.b64decode(payload))).convert("RGB")
+        path = Path(text)
+        if not path.is_file():
+            return None
+        return Image.open(path).convert("RGB")
+
+    if isinstance(image, np.ndarray):
+        arr = image.astype(np.uint8)
+        if arr.ndim == 2:
+            return Image.fromarray(arr).convert("RGB")
+        if arr.ndim == 3 and arr.shape[2] == 4:
+            return Image.fromarray(arr[:, :, :3]).convert("RGB")
+        return Image.fromarray(arr).convert("RGB")
+
+    if isinstance(image, Image.Image):
+        return image.convert("RGB")
+
+    return None
+
+
+def _classes_label() -> str:
+    return " / ".join(CLASS_NAMES)
+
+
+def _build_summary_html(ui: dict) -> str:
+    pred_name = ui["prediction"].split(" (")[0] if " (" in ui["prediction"] else ui["prediction"]
+    return f"""
+<div class="result-card">
+  <h3><i class="fa fa-paint-brush"></i> Prediksi: <span>{pred_name}</span></h3>
+  <div class="result-meta">
+    <div><i class="fa fa-percent"></i> Confidence: <span>{ui['confidence']*100:.1f}%</span></div>
+    <div><i class="fa fa-clock-o"></i> Inferensi: <span>{ui['inference_ms']} ms</span></div>
+    <div><i class="fa fa-tags"></i> Kelas: <span>{_classes_label()}</span></div>
+  </div>
+</div>
+"""
+
+
+def _status_html(message: str, status: str = "warning") -> str:
+    icon = "fa-info-circle" if status == "warning" else "fa-times-circle"
+    cls = "status-warn" if status == "warning" else "status-err"
+    return f"""
+<div class="result-card">
+  <p class="{cls}"><i class="fa {icon}"></i> {message}</p>
+</div>
+"""
+
+
+def _empty_response(message: str, status: str = "warning"):
+    return _status_html(message, status), None, None, "", ""
+
+
+def classify_static(image):
+    pil = _to_pil(image)
+    if pil is None:
+        return _empty_response("Upload gambar batik terlebih dahulu.")
+
+    try:
+        result = predict_batik(
+            pil_image=pil,
+            model=MODEL,
+            class_names=CLASS_NAMES,
+            device=DEVICE,
+        )
+        ui = format_results_for_ui(result)
+        probs = {k: v / 100.0 for k, v in ui["probabilities"].items()}
+        meta = f"{ui['inference_ms']} ms | Kelas: {_classes_label()}"
+        return (
+            _build_summary_html(ui),
+            probs,
+            ui["processed_image"],
+            ui["prediction"].split(" (")[0],
+            meta,
+        )
+    except Exception as e:
+        return _empty_response(f"Error inferensi: {e}", status="error")
+
+
+def build_interface():
+    classes_text = _classes_label()
+
+    with gr.Blocks(title="Klasifikasi Motif Batik | CNN", fill_width=True) as demo:
+        gr.HTML(f"""
+        <div class="app-header">
+            <h1><i class="fa fa-paint-brush"></i> Klasifikasi Motif Batik</h1>
+            <p class="subtitle">
+                <i class="fa fa-database"></i> CNN Research Demo
+                &nbsp;&middot;&nbsp;
+                <i class="fa fa-tags"></i> Kelas model: <b id="class-list">{classes_text}</b>
+            </p>
+        </div>
+        """)
+
+        gr.HTML("""
+        <div class="info-box">
+            <strong><i class="fa fa-info-circle"></i> Catatan</strong><br>
+            Jika belum ada checkpoint hasil training, app berjalan dalam demo mode dengan bobot acak.
+            Setelah dataset batik siap, train model dan simpan ke <code>checkpoints/batik_best.pth</code>.
+        </div>
+        """)
+
+        with gr.Row(equal_height=False):
+            with gr.Column(scale=1, elem_classes=["panel-card"]):
+                gr.HTML('<p class="section-title"><i class="fa fa-upload"></i> Input Gambar Batik</p>')
+                input_img = gr.Image(
+                    label="Upload gambar batik",
+                    type="pil",
+                    sources=["upload", "webcam"],
+                    height=380,
+                    elem_id="upload-cam-feed",
+                    buttons=["fullscreen", "download"],
+                )
+                with gr.Row(elem_classes=["tool-row"]):
+                    predict_btn = gr.Button("Klasifikasikan", variant="primary")
+                    clear_btn = gr.Button("Reset", variant="secondary")
+                gr.HTML("""
+                <ul class="hint-list">
+                    <li><i class="fa fa-lightbulb-o"></i> Gunakan foto kain/motif batik yang jelas.</li>
+                    <li><i class="fa fa-crop"></i> Area motif sebaiknya memenuhi sebagian besar gambar.</li>
+                    <li><i class="fa fa-hand-pointer-o"></i> Klik <b>Klasifikasikan</b> setelah memilih gambar.</li>
+                </ul>
+                """)
+
+            with gr.Column(scale=1, elem_classes=["panel-card"]):
+                gr.HTML('<p class="section-title"><i class="fa fa-bar-chart"></i> Hasil Klasifikasi</p>')
+                output_summary = gr.HTML(
+                    value='<div class="result-card"><p><i class="fa fa-info-circle"></i> Upload gambar lalu klik <b>Klasifikasikan</b> — hasil muncul di sini.</p></div>'
+                )
+                output_label = gr.Label(
+                    label=f"Probabilitas ({_classes_label()})",
+                    num_top_classes=max(len(CLASS_NAMES), 3),
+                )
+                output_processed = gr.Image(label="Gambar yang diproses", type="pil", height=220)
+                with gr.Row():
+                    output_top = gr.Textbox(label="Prediksi utama", interactive=False)
+                    output_meta = gr.Textbox(label="Status", interactive=False)
+
+        classify_outputs = [output_summary, output_label, output_processed, output_top, output_meta]
+        predict_btn.click(classify_static, inputs=[input_img], outputs=classify_outputs, show_progress="full")
+        input_img.upload(classify_static, inputs=[input_img], outputs=classify_outputs, show_progress="full")
+        input_img.change(classify_static, inputs=[input_img], outputs=classify_outputs, show_progress="minimal")
+        clear_btn.click(
+            fn=lambda: (None, "", None, None, "", ""),
+            outputs=[input_img, output_summary, output_label, output_processed, output_top, output_meta],
+        )
+
+        gr.HTML("""
+        <div class="app-footer">
+            <i class="fa fa-flask"></i> PyTorch + Gradio · 2026
+        </div>
+        """)
+
+    return demo
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--share", action="store_true", help="Public Gradio link")
+    parser.add_argument("--port", type=int, default=7860)
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("Starting Batik CNN Web Demo")
+    print(f"   Device: {DEVICE}")
+    print(f"   Model path: {MODEL_PATH}")
+    print("=" * 60)
+
+    ensure_demo_model()
+
+    demo = build_interface()
+    demo.queue(default_concurrency_limit=8)
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=args.port,
+        share=args.share,
+        css=CUSTOM_CSS,
+        head=FA_HEAD,
+        theme=APP_THEME,
+    )
