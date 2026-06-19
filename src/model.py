@@ -56,10 +56,12 @@ def get_model(
     pretrained: bool = True,
     dropout: float = 0.3,
     device: Optional[torch.device] = None,
+    freeze_backbone: bool = False,
 ) -> nn.Module:
     """
     Factory to get model.
     model_name: 'resnet18', 'resnet50', 'simple_cnn', or any torchvision resnet variant.
+    freeze_backbone: if True, freeze all layers except the final classifier (for small datasets)
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -80,6 +82,17 @@ def get_model(
             nn.Dropout(dropout),
             nn.Linear(in_features, num_classes),
         )
+
+        # Freeze backbone for transfer learning on small datasets
+        if freeze_backbone:
+            for param in model.parameters():
+                param.requires_grad = False
+            # Unfreeze last conv block (layer4) + classifier head
+            # Layer4 extracts high-level features specific to batik patterns
+            for param in model.layer4.parameters():
+                param.requires_grad = True
+            for param in model.fc.parameters():
+                param.requires_grad = True
     else:
         try:
             model = getattr(models, model_name)(weights="IMAGENET1K_V1" if pretrained else None)
