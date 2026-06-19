@@ -1,0 +1,2 @@
+checkpoints/batik_best.pth filter=lfs diff=lfs merge=lfs -text
+checkpoints/batik_resnet18_best.pth filter=lfs diff=lfs merge=lfs -text

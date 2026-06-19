@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 checkpoints/*.pth
+!checkpoints/batik_best.pth
+!checkpoints/batik_resnet18_best.pth
 checkpoints/*.pt
 logs/
 data/raw/*
