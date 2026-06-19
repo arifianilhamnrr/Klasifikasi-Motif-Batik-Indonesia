@@ -3,7 +3,7 @@ Telegram bot for batik motif classification.
 Send an image to the bot, get back the predicted motif + confidence.
 
 Usage:
-    python telegram_bot.py --checkpoint checkpoints/batik_resnet18_best.pth
+    python telegram_bot.py --checkpoint checkpoints/batik_best.pth
 """
 
 import argparse
@@ -25,7 +25,7 @@ import torch
 from src.inference import load_model_and_meta, predict_batik
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-DEFAULT_CHECKPOINT = "checkpoints/batik_resnet18_best.pth"
+DEFAULT_CHECKPOINT = "checkpoints/batik_best.pth"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = None
