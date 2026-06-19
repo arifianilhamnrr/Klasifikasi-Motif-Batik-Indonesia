@@ -93,16 +93,16 @@ Dataset final **bukan dari satu sumber**, melainkan hasil penggabungan beberapa 
 
 ### Ringkasan sumber
 
-| # | Sumber | Lokasi / File | Kontribusi |
-|---|---|---|---|
-| 1 | **Batik Nusantara** (Kaggle) | `batik-nusantara-batik-indonesia-dataset.zip` | Kelas regional: Bali, Betawi, Dayak, Cendrawasih, Kawung, Parang, Megamendung, Keraton, dll. |
-| 2 | **Roboflow Batik** | `batikimages/` · [universe.roboflow.com/a-co6il/batik-tsrj7](https://universe.roboflow.com/a-co6il/batik-tsrj7) | ~4.357 citra (CC BY 4.0): Insang, Kawung, Parang, Megamendung, Sidoluhur, Truntum, Tumpal |
-| 3 | **Indonesian Batik Enhanced & Cleaned** | `dataset1.zip` / `indonesian-batik-dataset-enhanced-and-cleaned.zip` | Gentongan, IkatCelup, Kawung, Megamendung, Parang, Dayak, Kraton, Simbut, TujuhRupa, dll. |
-| 4 | **Dataset Sidomukti** | `dataset2.zip` | Kelas `sidomukti` → `batik-sidomukti` |
-| 5 | **3 Dataset Batik** | `3 Dataset Batik/` | Batik Bali, Batik Betawi, Batik Dayak |
-| 6 | **Batik Dayak-Betawi-Bali** | `dataset-batik-dayak-batik-betawi-dan-batik-bali.zip` | Suplemen kelas regional Bali, Betawi, Dayak |
-| 7 | **BatikSnap** | `batiksnap-dataset.zip` | Citra motif klasik (Insang, Parang, Kawung, dll.) |
-| 8 | **Corak App** | `corak-app/` | Beberapa versi dataset motif batik (DATASET, DATASETv4, DATASETv7) |
+| # | Sumber | Link | Lokasi / File | Kontribusi |
+|---|---|---|---|---|
+| 1 | **Batik Motifs** (Kaggle) | [hamdanialikhsan/batik-motifs](https://www.kaggle.com/datasets/hamdanialikhsan/batik-motifs) | `indonesian-batik-motifs.zip` | 630 images, 20 classes (dataset awal) |
+| 2 | **Batik Nusantara** (Kaggle) | [dionisiusdh/indonesian-batik-motifs](https://www.kaggle.com/datasets/dionisiusdh/indonesian-batik-motifs) | `batik-nusantara-batik-indonesia-dataset.zip` | 983 images, 20 classes — Kelas regional: Bali, Betawi, Dayak, Cendrawasih, Kawung, Parang, Megamendung, Keraton, dll. |
+| 3 | **Indonesian Batik Enhanced & Cleaned** (Kaggle) | [fisheightcharacter/indonesian-batik-dataset-enhanced-and-cleaned](https://www.kaggle.com/datasets/fisheightcharacter/indonesian-batik-dataset-enhanced-and-cleaned) | `indonesian-batik-dataset-enhanced-and-cleaned.zip` | 1089 images — Ceplok, Sogan, Sidoluhur, Sekar, Tambal, Lasem, Priangan, Cendrawasih, Megamendung, Parang, Kawung, Celup |
+| 4 | **Roboflow Batik** | [universe.roboflow.com/a-co6il/batik-tsrj7](https://universe.roboflow.com/a-co6il/batik-tsrj7) | `batikimages/` | ~4.357 citra (CC BY 4.0): Insang, Kawung, Parang, Megamendung, Sidoluhur, Truntum, Tumpal |
+| 5 | **Corak App DATASETv7** (Kaggle) | [alfanme/indonesian-batik-motifs-corak-app](https://www.kaggle.com/datasets/alfanme/indonesian-batik-motifs-corak-app) | `corak-app/DATASETv7/TRAIN/` | 210 images — Batik Cendrawasih (70), Batik Sekar Jagad (70), Batik Tambal (70) |
+| 6 | **3 Dataset Batik** (Kaggle) | [laoderhizwanyusuf/dataset-batik-dayak-batik-betawi-dan-batik-bali](https://www.kaggle.com/datasets/laoderhizwanyusuf/dataset-batik-dayak-batik-betawi-dan-batik-bali) | `3 Dataset Batik/` | 303 images — Batik Bali (101), Batik Betawi (100), Batik Dayak (101) |
+| 7 | **BatikSnap Dataset** (Kaggle) | [syahdanputra/batiksnap-dataset](https://www.kaggle.com/datasets/syahdanputra/batiksnap-dataset) | `batiksnap-dataset.zip` | 1436 images — Citra motif klasik (Insang, Parang, Kawung, Mega Mendung, Sidoluhur, Truntum, Tumpal) |
+| 8 | **Google Drive Upload** | (dataset pribadi) | Google Drive | 2 files, 70.8 MB total |
 
 > **Catatan:** File dataset mentah (`data/raw/`, `data/processed/`) **tidak** disertakan di repository karena ukurannya besar. Yang di-push hanya kode, script, dan checkpoint model via Git LFS.
 
@@ -131,18 +131,31 @@ Dataset final **bukan dari satu sumber**, melainkan hasil penggabungan beberapa 
               checkpoints/batik_best.pth
 ```
 
-### Mapping kelas tambahan (`merge_datasets.py`)
+### Mapping kelas tambahan
 
 Script `src/merge_datasets.py` menggabungkan dataset berformat berbeda ke skema penamaan 20 kelas:
 
-| Nama di dataset sumber | Nama kelas final |
-|---|---|
-| `Gentongan` | `batik-gentongan` |
-| `IkatCelup` | `batik-celup` |
-| `Kawung` | `batik-kawung` |
-| `Megamendung` | `batik-megamendung` |
-| `Parang` | `batik-parang` |
-| `sidomukti` | `batik-sidomukti` |
+| Nama di dataset sumber | Nama kelas final | Sumber |
+|---|---|---|
+| `Gentongan` | `batik-gentongan` | Enhanced & Cleaned |
+| `IkatCelup` | `batik-celup` | Enhanced & Cleaned |
+| `Kawung` | `batik-kawung` | Enhanced & Cleaned + BatikSnap |
+| `Megamendung` / `Jawa_Barat_Megamendung` | `batik-megamendung` | Enhanced & Cleaned |
+| `Parang` / `Solo_Parang` / `Yogyakarta_Parang` | `batik-parang` | Enhanced & Cleaned |
+| `sidomukti` | `batik-sidomukti` | Google Drive + BatikSnap |
+| `Ceplok` | `batik-ceplok` | Enhanced & Cleaned |
+| `Sogan` | `batik-sogan` | Enhanced & Cleaned |
+| `Sidoluhur` | `batik-sidoluhur` | Enhanced & Cleaned + BatikSnap |
+| `Sekar` | `batik-sekar` | Enhanced & Cleaned |
+| `Tambal` | `batik-tambal` | Enhanced & Cleaned + Corak App |
+| `Lasem` | `batik-lasem` | Enhanced & Cleaned |
+| `Priangan_Merak_Ngibing` | `batik-priangan` | Enhanced & Cleaned |
+| `Papua_Cendrawasih` | `batik-cendrawasih` | Enhanced & Cleaned |
+| `Batik Cendrawasih` | `batik-cendrawasih` | Corak App DATASETv7 |
+| `Batik Sekar Jagad` | `batik-sekar` | Corak App DATASETv7 |
+| `Batik Tambal` | `batik-tambal` | Corak App DATASETv7 |
+| `Batik Bali` | `batik-bali` | 3 Dataset Batik |
+| `Batik Betawi` | `batik-betawi` | 3 Dataset Batik |
 
 ---
 
